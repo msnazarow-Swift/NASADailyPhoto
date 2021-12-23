@@ -8,20 +8,7 @@
 
 import UIKit
 
-extension String{
-    func height(withConstrainedWidth width: CGFloat,
-                font: UIFont) -> CGFloat {
-        let constraintRect = CGSize(width: width,
-                                    height: .greatestFiniteMagnitude)
-        let boundingBox = self.boundingRect(with: constraintRect,
-                                            options: .usesLineFragmentOrigin,
-                                            attributes: [NSAttributedString.Key.font: font], context: nil)
-        
-        return ceil(boundingBox.height)
-    }
-}
-
-extension UIViewController{
+extension UIViewController {
     @objc func dismissKeyboard() {
         view.endEditing(true)
     }
@@ -32,25 +19,7 @@ extension UIViewController{
     }
 }
 
-
-enum SizeConstants {
-    static let screenWidth = UIScreen.main.bounds.size.width
-    static let screenHeight = UIScreen.main.bounds.size.height
-    
-    static var statusBarHeight: CGFloat {
-        var statusBarHeight: CGFloat = 0
-        if #available(iOS 13.0, *) {
-            let window = UIApplication.shared.windows.first(where: {$0.isKeyWindow})
-            statusBarHeight = window?.windowScene?.statusBarManager?.statusBarFrame.height ?? 0
-        } else {
-            statusBarHeight = UIApplication.shared.statusBarFrame.height
-        }
-        return statusBarHeight
-    }
-}
-
 class ViewController: UIViewController {
-
     @IBOutlet weak var dateLabel: UILabel!
     @IBOutlet weak var imageHeight: NSLayoutConstraint!
     @IBOutlet weak var contentViewWidth: NSLayoutConstraint!
@@ -60,6 +29,7 @@ class ViewController: UIViewController {
     @IBOutlet weak var descriptionLabel: UILabel!
     @IBOutlet weak var copyrightLabel: UILabel!
     @IBOutlet weak var scrollView: UIScrollView!
+
     let photoInfoController = PhotoInfoController()
     let formatter = DateFormatter()
     private let datePicker: UIDatePicker = {
@@ -67,33 +37,38 @@ class ViewController: UIViewController {
         var components = DateComponents()
         components.year = 0
         let maxDate = Calendar.current.date(byAdding: components, to: Date())
+        picker.minimumDate = Calendar.current.date(from: DateComponents(year: 1995, month: 6, day: 16))
         picker.maximumDate = maxDate
         picker.backgroundColor = .white
         picker.datePickerMode = .date
+        if #available(iOS 13.4, *) {
+            picker.preferredDatePickerStyle = .wheels
+        }
         return picker
     }()
 
     private let fakeTextField = UITextField()
 
-    @objc  func didTapDateLabel(){
+    @objc  func didTapDateLabel() {
         fakeTextField.becomeFirstResponder()
     }
-    
-    @objc
-    private func doneAction() {
-         let date = formatter.string(from: datePicker.date)
-         dateLabel.text = date
 
-            photoInfoController.fetchPhotoInfo(date: date) { (photoInfo) in
-                   guard let photoInfo = photoInfo else { return }
-                   self.updataUI(with: photoInfo)
-               }
-
+    @objc private func doneAction() {
+        let date = formatter.string(from: datePicker.date)
+        dateLabel.text = date
+        photoInfoController.fetchPhotoInfo(date: date) { result in
+            switch result {
+            case let .success(photoInfo):
+                self.updataUI(with: photoInfo)
+            case let .failure(error):
+                self.showError(error: error.localizedDescription)
+            }
+        }
         fakeTextField.resignFirstResponder()
     }
 
-    
-    func setImage(image: UIImage){
+
+    func setImage(image: UIImage) {
         self.imageView.image = image
         let width = image.size.width
         let height = image.size.height
@@ -102,30 +77,28 @@ class ViewController: UIViewController {
         let realHeight = coeff * realWidth
         imageHeight.constant = realHeight
     }
-    
-    func setHeight(with photoInfo: PhotoInfo){
-        let description = photoInfo.description
+
+    func setHeight(with photoInfo: PhotoInfo) {
+        let description = photoInfo.explanation
         self.descriptionLabel.text = description
         let descriptionTextHeight = description.height(withConstrainedWidth: SizeConstants.screenWidth, font: .systemFont(ofSize: 17))
         descriptionHeight.constant = descriptionTextHeight
-        if let copyright = photoInfo.copyright{
+        if let copyright = photoInfo.copyright {
             let title = "Copyright \(copyright) (c)"
             self.copyrightLabel.text = title
             let copyrightTextHeight = title.height(withConstrainedWidth: SizeConstants.screenWidth, font: .systemFont(ofSize: 17))
             copyrightHeight.constant = copyrightTextHeight
-        }
-        else{
+        } else {
             self.copyrightLabel.isHidden = true
             copyrightHeight.constant = 0
         }
         view.layoutIfNeeded()
     }
 
-    func updataUI(with photoInfo: PhotoInfo){
+    func updataUI(with photoInfo: PhotoInfo) {
         DispatchQueue.global().async {
-            let task = URLSession.shared.dataTask(with: photoInfo.url){
-                        (data, response, error) in
-                        guard let data = data, let image = UIImage(data: data) else { return }
+            let task = URLSession.shared.dataTask(with: photoInfo.url) { data, _, _ in
+                guard let data = data, let image = UIImage(data: data) else { return }
                 DispatchQueue.main.async {
                     self.setImage(image: image)
                     self.title = photoInfo.title
@@ -134,15 +107,13 @@ class ViewController: UIViewController {
             }
             task.resume()
         }
-
     }
 
-    
     override func viewDidLoad() {
         super.viewDidLoad()
         formatter.dateFormat = "yyyy-MM-dd"
-        
-//        hideKeyboardWhenTappedAround()
+
+        hideKeyboardWhenTappedAround()
         fakeTextField.inputView = datePicker
         let toolBar = UIToolbar()
         toolBar.barStyle = .default
@@ -153,26 +124,36 @@ class ViewController: UIViewController {
         toolBar.isUserInteractionEnabled = true
         toolBar.sizeToFit()
         fakeTextField.inputAccessoryView = toolBar
-        fakeTextField.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(fakeTextField)
-        NSLayoutConstraint.activate([
-            fakeTextField.bottomAnchor.constraint(equalTo: dateLabel.bottomAnchor),
-                fakeTextField.heightAnchor.constraint(equalToConstant: 1)
-            ])
-
         contentViewWidth.constant = SizeConstants.screenWidth
-        
-       
-        
-        
-        let date = "2020-09-09"//formatter.string(from: Date())
-        photoInfoController.fetchPhotoInfo(date: date) { (photoInfo) in
-            guard let photoInfo = photoInfo else { return }
-            self.updataUI(with: photoInfo)
+
+        let date = "2020-09-09"// formatter.string(from: Date())
+        photoInfoController.fetchPhotoInfo(date: date) { result in
+        switch result {
+        case let .success(photoInfo):
+            if photoInfo.mediaType == .video {
+                self.showError(error: "Resource is a video")
+            } else {
+                self.updataUI(with: photoInfo)
+            }
+        case let .failure(error):
+            self.showError(error: error.localizedDescription)
+        }
         }
         let tap = UITapGestureRecognizer(target: self, action: #selector(didTapDateLabel))
         dateLabel.addGestureRecognizer(tap)
         dateLabel.isUserInteractionEnabled = true
     }
-}
 
+
+    func showError(error: String) {
+        DispatchQueue.main.async {
+            let alert: UIAlertController = {
+                let alert = UIAlertController(title: "Error", message: error, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "Ok", style: .cancel, handler: nil))
+                return alert
+            }()
+            self.present(alert, animated: true)
+        }
+    }
+}

@@ -7,23 +7,15 @@
 //
 
 import Foundation
-struct PhotoInfo: Codable {
+struct PhotoInfo: Decodable {
 var title: String
-var description: String
+var explanation: String
 var url: URL
 var copyright: String?
+var mediaType: Types
+}
 
-enum CodingKeys: String, CodingKey {
-    case title
-    case description = "explanation"
-    case url
-    case copyright
-}
-init(from decoder: Decoder) throws {
-    let valueContainer = try decoder.container(keyedBy: CodingKeys.self)
-    self.title = try valueContainer.decode(String.self, forKey: CodingKeys.title)
-    self.description = try valueContainer.decode(String.self, forKey: CodingKeys.description)
-    self.url = try valueContainer.decode(URL.self, forKey: CodingKeys.url)
-    self.copyright = try valueContainer.decode(String.self, forKey: CodingKeys.copyright)
-}
+enum Types: String, Decodable {
+    case video
+    case image
 }
